@@ -132,14 +132,25 @@ uint8_t const* tud_descriptor_configuration_cb(uint8_t index) {
 // Invoked when received GET HID REPORT DESCRIPTOR
 // Application return pointer to descriptor
 // Descriptor contents must exist long enough for transfer to complete
+
+
 uint8_t const* tud_hid_descriptor_report_cb(uint8_t itf) {
     if (itf == 0) {
-        return our_descriptor->descriptor;
+        // [핵심 수정] boot_protocol_keyboard 플래그를 확인합니다.
+        if (boot_protocol_keyboard) {
+            // KVM이 승인한 '아주 기본적인' 프로필을 반환합니다.
+            return boot_kb_report_descriptor; 
+        } else {
+            // 기본 '고급 프로필'을 반환합니다.
+            return our_descriptor->descriptor;
+        }
     } else if (itf == 1) {
         return config_report_descriptor;
     }
 
     return NULL;
+}
+
 }
 
 static uint16_t _desc_str[32];
