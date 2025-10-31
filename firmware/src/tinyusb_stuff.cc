@@ -151,7 +151,6 @@ uint8_t const* tud_hid_descriptor_report_cb(uint8_t itf) {
     return NULL;
 }
 
-}
 
 static uint16_t _desc_str[32];
 
