@@ -246,6 +246,7 @@ const uint8_t our_report_descriptor_absolute[] = {
     0xC0,                         //   End Collection
     0xC0,                         // End Collection
 
+ /*
     0x05, 0x0C,                // Usage Page (Consumer)
     0x09, 0x01,                // Usage (Consumer Control)
     0xA1, 0x01,                // Collection (Application)
@@ -267,6 +268,7 @@ const uint8_t our_report_descriptor_absolute[] = {
     0x95, 0x01,                //   Report Count (1)
     0x81, 0x02,                //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
     0xC0,                      // End Collection
+*/
 };
 
 const uint8_t our_report_descriptor_horipad[] = {
