@@ -7,9 +7,9 @@
 
 
 // 1. 이 상수 정의는 KVM 호환성을 위해 당분간 사용하지 않습니다.
-// const uint8_t REPORT_ID_MOUSE = 1;
-// const uint8_t REPORT_ID_KEYBOARD = 2;
-// const uint8_t REPORT_ID_CONSUMER = 3;
+const uint8_t REPORT_ID_MOUSE = 1;
+const uint8_t REPORT_ID_KEYBOARD = 2;
+const uint8_t REPORT_ID_CONSUMER = 3;
 
 // 2. 'our_report_descriptor_kb_mouse' 배열 전체를 아래 코드로 덮어쓰세요.
 const uint8_t our_report_descriptor_kb_mouse[] = {
