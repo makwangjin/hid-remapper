@@ -5,6 +5,8 @@ add_subdirectory(usb_midi_host)
 add_compile_definitions(PICO_DEFAULT_UART_BAUD_RATE=921600)
 add_compile_definitions(PERSISTED_CONFIG_SIZE=4096)
 add_compile_definitions(PICO_XOSC_STARTUP_DELAY_MULTIPLIER=64)
+# --- 이 줄을 여기에 추가하세요 ---
+add_compile_definitions(TINYUSB_CFG_DEVICE_CDC=0)
 
 set(PICO_SDK_PATH "${CMAKE_CURRENT_LIST_DIR}/pico-sdk")
 set(PICO_TINYUSB_PATH "${CMAKE_CURRENT_LIST_DIR}/tinyusb")
