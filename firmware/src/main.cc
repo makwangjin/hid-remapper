@@ -72,6 +72,17 @@ void __no_inline_not_in_flash_func(sof_handler)(uint32_t frame_count) {
 }
 
 bool do_send_report(uint8_t interface, const uint8_t* report_with_id, uint8_t len) {
+    // *** KVM 호환성 수정 시작 ***
+    // interface 0은 키보드/마우스 HID 인터페이스입니다.
+    // '설계도'에서 소비자 제어(ID 3)를 삭제했으므로,
+    // '실행 로직'에서도 ID 3번 리포트를 전송하지 않고 무시(차단)합니다.
+    if (interface == 0 && report_with_id[0] == 3) {
+        // 이 리포트는 소비자 제어 리포트입니다. 전송하지 않고 버립니다.
+        return true; // (시스템에는 전송 성공했다고 알림)
+    }
+    // *** KVM 호환성 수정 끝 ***
+
+    // ID 1(마우스), ID 2(키보드) 및 기타 모든 리포트는 정상 전송합니다.
     tud_hid_n_report(interface, report_with_id[0], report_with_id + 1, len - 1);
     return true;  // XXX?
 }
