@@ -135,9 +135,13 @@ uint8_t const* tud_descriptor_configuration_cb(uint8_t index) {
 uint8_t const* tud_hid_descriptor_report_cb(uint8_t itf) {
     if (itf == 0) {
         return our_descriptor->descriptor;
-    } else if (itf == 1) {
+       
+    } 
+     /* <-- 주석 처리 시작 else if (itf == 1) {
         return config_report_descriptor;
+      
     }
+    */ // <-- 주석 처리 끝
 
     return NULL;
 }
@@ -191,7 +195,8 @@ uint16_t tud_hid_get_report_cb(uint8_t itf, uint8_t report_id, hid_report_type_t
     if (itf == 0) {
         return handle_get_report0(report_id, buffer, reqlen);
     } else {
-        return handle_get_report1(report_id, buffer, reqlen);
+        /*return handle_get_report1(report_id, buffer, reqlen);*/ //원본주석
+        return 0; // <--- 변경
     }
 }
 
@@ -202,9 +207,12 @@ void tud_hid_set_report_cb(uint8_t itf, uint8_t report_id, hid_report_type_t rep
             buffer++;
         }
         handle_set_report0(report_id, buffer, bufsize);
-    } else {
+    } 
+    /* <-- 주석 처리 시작
+    else {
         handle_set_report1(report_id, buffer, bufsize);
     }
+    */ // <-- 주석 처리 끝
 }
 
 void tud_hid_set_protocol_cb(uint8_t instance, uint8_t protocol) {
