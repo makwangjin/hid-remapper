@@ -18,9 +18,6 @@
 #include "remapper.h"
 
 #define MAX_REPORT_SIZE 64
-const uint8_t REPORT_ID_MOUSE = 1;
-const uint8_t REPORT_ID_KEYBOARD = 2;
-const uint8_t REPORT_ID_CONSUMER = 3;
 
 const uint8_t MAPPING_FLAG_STICKY = 1 << 0;
 const uint8_t MAPPING_FLAG_TAP = 1 << 1;
@@ -1933,10 +1930,6 @@ void update_their_descriptor_derivates() {
     }
 }
 
-// [이 함수 전체를 복사해서 'remapper.cc'의 기존 함수와 교체하세요]
-
-// [이 함수 전체를 복사해서 'remapper.cc'의 기존 함수와 교체하세요]
-
 void parse_our_descriptor() {
     std::unordered_map<uint8_t, std::unordered_map<uint32_t, usage_def_t>> our_feature_usages;
 
@@ -1963,7 +1956,6 @@ void parse_our_descriptor() {
     memset(report_masks_relative, 0, sizeof(report_masks_relative));
     memset(report_masks_absolute, 0, sizeof(report_masks_absolute));
 
-    // 1. '엔진'이 '멍청한 지도'(our_usages)를 생성합니다.
     auto report_sizes_map = parse_descriptor(
         our_usages,
         their_usages[OUR_OUT_INTERFACE],
@@ -1971,34 +1963,6 @@ void parse_our_descriptor() {
         has_report_id_theirs[OUR_OUT_INTERFACE],
         boot_protocol_keyboard ? boot_kb_report_descriptor : our_descriptor->descriptor,
         boot_protocol_keyboard ? boot_kb_report_descriptor_length : our_descriptor->descriptor_length);
-
-    // ---▼ KVM 호환성 v6 수정: '엔진' 강제 개조 (ID 및 Bitpos 동시 수정) ▼---
-    // '더 빠른 지도'(our_usages_flat)가 생성되기 *전에*
-    // '멍청한 지도'(our_usages)를 '강제 개조'합니다.
-
-    // 'v2 통합 광고지'는 키보드가 16바이트(128비트)를 사용합니다.
-    const uint16_t MOUSE_BIT_OFFSET = 128; // 16 bytes * 8 bits
-
-    // 'our_usages' 맵(엔진의 '지도')을 순회하며 'id'와 'bitpos'를 강제 수정합니다.
-    for (auto& [report_id, usage_map] : our_usages) {
-        // 'v2 통합 광고지'는 ID가 0 뿐이므로, 이 로직은
-        // '엔진'이 '광고지'를 무시하고 ID 1, 2를 생성했을 경우에 대비합니다.
-        for (auto& [usage, usage_def] : usage_map) {
-            
-            // '원본' ID가 1 (마우스) 또는 3 (소비자 제어)이었던 경우
-            if (report_id == REPORT_ID_MOUSE || report_id == REPORT_ID_CONSUMER) {
-                usage_def.report_id = 0; // ID를 0으로 강제
-                usage_def.bitpos += MOUSE_BIT_OFFSET; // bit 주소를 128만큼 뒤로 민다
-            }
-            // '원본' ID가 2 (키보드)였던 경우
-            else if (report_id == REPORT_ID_KEYBOARD) {
-                usage_def.report_id = 0; // ID를 0으로 강제
-                // bitpos는 0이므로 수정 불필요
-            }
-        }
-    }
-    // ---▲ KVM 호환성 v6 수정 끝 ▲---
-
 
     for (auto const& [report_id, size] : report_sizes_map[ReportType::INPUT]) {
         report_sizes[report_id] = size;
@@ -2015,69 +1979,32 @@ void parse_our_descriptor() {
     }
 
     std::set<uint64_t> our_usage_ranges_set;
-    
-    // 3. '엔진'이 '강제 개조된 지도'(our_usages)를 기반으로
-    //    '더 빠른 지도'(our_usages_flat)를 생성합니다.
     for (auto const& [report_id, usage_map] : our_usages) {
         for (auto const& [usage, usage_def] : usage_map) {
             if (usage_def.usage_maximum == 0) {
-                
-                // ---▼ KVM 호환성 v6 수정 (평탄화 지도 강제 개조) ▼---
-                // 'our_usages_flat'은 'v4'에서 추측에 의존했지만,
-                // 'v6'에서는 '개조된' usage_def를 직접 사용하므로 더 정확합니다.
-                usage_def_t modified_usage_def = usage_def; // '개조된' 지도 복사
-
-                // 'v4'의 '평탄화 지도' 추측 로직을 여기로 가져와서
-                // '개조된' usage_def에 *한 번 더* 적용합니다. (이중 안전장치)
-                uint32_t usage_page = usage & 0xFFFF0000;
-                if (usage_page == 0x00010000 || // Generic Desktop
-                    usage_page == 0x00090000 || // Button
-                    usage_page == 0x000C0000)   // Consumer
-                {
-                    if (usage_page != 0x00070000) { // 키보드가 아니면
-                        modified_usage_def.report_id = 0;
-                        // 'bitpos'가 이미 MOUSE_BIT_OFFSET만큼 밀렸는지 확인합니다.
-                        // (중복 적용 방지)
-                        if (modified_usage_def.bitpos < MOUSE_BIT_OFFSET) {
-                             modified_usage_def.bitpos += MOUSE_BIT_OFFSET;
-                        }
-                    } else { // 키보드이면
-                        modified_usage_def.report_id = 0;
-                    }
-                } else { // 기타 (키보드로 간주)
-                     modified_usage_def.report_id = 0;
-                }
-
-                our_usages_flat[usage] = modified_usage_def; // '개조된' 정보로 '더 빠른 지도' 생성
-                // ---▲ KVM 호환성 v6 수정 끝 ▲---
-
+                our_usages_flat[usage] = usage_def;
                 if (usage == DPAD_USAGE) {
-                    our_dpad_usage = modified_usage_def; // '개조된' 정보 사용
+                    our_dpad_usage = usage_def;
                     have_dpad = true;
                     our_usages_flat[DPAD_USAGE_LEFT] = (usage_def_t){};
                     our_usages_flat[DPAD_USAGE_RIGHT] = (usage_def_t){};
                     our_usages_flat[DPAD_USAGE_UP] = (usage_def_t){};
                     our_usages_flat[DPAD_USAGE_DOWN] = (usage_def_t){};
                 }
-                our_usage_ranges_set.insert(((uint64_t) usage << 32) | (modified_usage_def.usage_maximum ? modified_usage_def.usage_maximum : usage));
+                our_usage_ranges_set.insert(((uint64_t) usage << 32) | (usage_def.usage_maximum ? usage_def.usage_maximum : usage));
 
-                if (modified_usage_def.is_relative) {
-                    put_bits(report_masks_relative[report_id], report_sizes[report_id], modified_usage_def.bitpos, modified_usage_def.size, 0xFFFFFFFF);
+                if (usage_def.is_relative) {
+                    put_bits(report_masks_relative[report_id], report_sizes[report_id], usage_def.bitpos, usage_def.size, 0xFFFFFFFF);
                 } else {
-                    put_bits(report_masks_absolute[report_id], report_sizes[report_id], modified_usage_def.bitpos, modified_usage_def.size, 0xFFFFFFFF);
+                    put_bits(report_masks_absolute[report_id], report_sizes[report_id], usage_def.bitpos, usage_def.size, 0xFFFFFFFF);
                 }
-            } else {  // array range (이 부분도 '개조'가 필요할 수 있으나, NKRO 키보드이므로 일단 둡니다)
-                // ---▼ KVM 호환성 v6 수정 (array range) ▼---
-                usage_def_t modified_usage_def = usage_def;
-                modified_usage_def.report_id = 0; // 키보드이므로 ID 0, bitpos 0
-                
+            } else {  // array range
                 our_array_range_usages.push_back((usage_usage_def_t){
                     .usage = usage,
-                    .usage_def = modified_usage_def, // '개조된' 정보 사용
+                    .usage_def = usage_def,
                 });
-                our_usage_ranges_set.insert(((uint64_t) usage << 32) | modified_usage_def.usage_maximum);
-                put_bits(report_masks_absolute[report_id], report_sizes[report_id], modified_usage_def.bitpos, modified_usage_def.size * modified_usage_def.count, 0xFFFFFFFF);
-                // ---▲ KVM 호환성 v6 수정 끝 ▲---
+                our_usage_ranges_set.insert(((uint64_t) usage << 32) | usage_def.usage_maximum);
+                put_bits(report_masks_absolute[report_id], report_sizes[report_id], usage_def.bitpos, usage_def.size * usage_def.count, 0xFFFFFFFF);
             }
         }
     }
