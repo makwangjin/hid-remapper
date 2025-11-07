@@ -1930,6 +1930,8 @@ void update_their_descriptor_derivates() {
     }
 }
 
+// [이 함수 전체를 복사해서 'remapper.cc'의 기존 함수와 교체하세요]
+
 void parse_our_descriptor() {
     std::unordered_map<uint8_t, std::unordered_map<uint32_t, usage_def_t>> our_feature_usages;
 
@@ -2008,30 +2010,55 @@ void parse_our_descriptor() {
             }
         }
     }
-// ... (parse_our_descriptor 함수의 윗부분 코드) ...
-            }
-        }
-    }
 
-    // ---▼ KVM 호환성 v3 수정: '엔진' 강제 개조 (이 코드를 여기에 삽입) ▼---
-    // 'remapper.cc'의 '엔진'이 '광고지'를 무시하고 
-    // 리포트 ID 1, 2를 계속 사용하려는 '옛 습관'을 수정합니다.
-    //
-    // 'our_usages' 맵에 파싱된 모든 'usage_def'(지도)를 순회하면서,
-    // 'report_id' 값을 0으로 강제로 덮어써서,
-    // '엔진'이 모든 데이터를 'reports[0]'('통합 버퍼')에 쓰도록 만듭니다.
+    // ---▼ KVM 호환성 v4 수정: '완전한 엔진 개조' (ID 및 Bitpos 동시 수정) ▼---
+    // '엔진'이 '광고지'를 무시하고 ID 1, 2를 사용하려는 '옛 습관'을 수정합니다.
+    // '엔진'이 모든 데이터를 'reports[0]'에 쓰도록 강제하고,
+    // '마우스' 데이터가 '키보드' 데이터를 덮어쓰지 않도록 'bitpos'를 강제로 오프셋합니다.
+
+    // 1. 'v2 통합 광고지'는 키보드가 16바이트(128비트)를 사용합니다.
+    const uint16_t MOUSE_BIT_OFFSET = 128; // 16 bytes * 8 bits
+
+    // 2. 'our_usages' 맵(엔진의 '지도')을 순회하며 'id'와 'bitpos'를 강제 수정합니다.
     for (auto& [report_id, usage_map] : our_usages) {
         for (auto& [usage, usage_def] : usage_map) {
-            usage_def.report_id = 0; // '지도'의 report_id를 0으로 강제
+            
+            // '원본' ID가 1 (마우스) 또는 3 (소비자 제어)이었던 경우
+            if (report_id == REPORT_ID_MOUSE || report_id == REPORT_ID_CONSUMER) {
+                usage_def.report_id = 0; // ID를 0으로 강제
+                usage_def.bitpos += MOUSE_BIT_OFFSET; // bit 주소를 128만큼 뒤로 민다
+            }
+            // '원본' ID가 2 (키보드)였던 경우
+            else if (report_id == REPORT_ID_KEYBOARD) {
+                usage_def.report_id = 0; // ID를 0으로 강제
+                // bitpos는 0이므로 수정 불필요
+            }
         }
     }
+
+    // 3. '평탄화된 지도'도 똑같이 수정합니다.
     for (auto& [usage, usage_def] : our_usages_flat) {
-        usage_def.report_id = 0; // '평탄화된 지도'의 report_id도 0으로 강제
+        // '원본' ID는 알 수 없지만, 'Usage Page'로 마우스/소비자 제어인지 추측합니다.
+        uint32_t usage_page = usage & 0xFFFF0000;
+        
+        if (usage_page == 0x00010000 || // Generic Desktop (Mouse X, Y, Wheel)
+            usage_page == 0x00090000 || // Button (Mouse Buttons)
+            usage_page == 0x000C0000)   // Consumer (AC Pan, Media Keys)
+        {
+            // 키보드(0x00070000)가 아닌 것들은 모두 마우스로 간주하고 뒤로 민다.
+            if (usage_page != 0x00070000) { 
+                usage_def.report_id = 0;
+                usage_def.bitpos += MOUSE_BIT_OFFSET;
+            } else {
+                usage_def.report_id = 0;
+            }
+        } else {
+             usage_def.report_id = 0;
+        }
     }
-    // ---▲ KVM 호환성 v3 수정 끝 ▲---
+    // ---▲ KVM 호환성 v4 수정 끝 ▲---
 
-
-    rlencode(our_usage_ranges_set, our_usages_rle); // <-- 이 줄 바로 위에 삽입
+    rlencode(our_usage_ranges_set, our_usages_rle);
 }
 
 void print_stats() {
