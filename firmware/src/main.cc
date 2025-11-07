@@ -71,18 +71,17 @@ void __no_inline_not_in_flash_func(sof_handler)(uint32_t frame_count) {
     sof_callback();
 }
 
+// [이 코드로 완전히 덮어쓰세요]
+
 bool do_send_report(uint8_t interface, const uint8_t* report_with_id, uint8_t len) {
-    // KVM 호환성 수정:
+    // KVM 호환성 수정 (39번 답변):
     // 'remapper.cc'는 ID(report_with_id[0])를 포함해서 데이터를 넘기지만,
     // 우리는 KVM을 위해 ID가 없는 tud_hid_report() 함수를 사용합니다.
-    // report_with_id + 1: ID를 건너뛴 '순수 데이터'
-    // len - 1: ID 길이를 뺀 '순수 데이터'의 길이
+    // 'report_with_id + 1'은 ID 바이트를 건너뛴 '순수 데이터'를 의미합니다.
+    // 'len - 1'은 ID 바이트 1개를 뺀 '순수 데이터'의 길이입니다.
+    
     tud_hid_report(interface, report_with_id + 1, len - 1);
-    return true;  // XXX?
-}
-
-    // ID 1(마우스), ID 2(키보드) 및 기타 모든 리포트는 정상 전송합니다.
-    tud_hid_n_report(interface, report_with_id[0], report_with_id + 1, len - 1);
+    
     return true;  // XXX?
 }
 
