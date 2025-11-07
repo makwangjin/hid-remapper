@@ -89,28 +89,46 @@ void __no_inline_not_in_flash_func(sof_handler)(uint32_t frame_count) {
     sof_callback();
 }
 
-// [do_send_report 함수 전체를 이 코드로 교체하세요]
+// [do_send_report 함수 전체를 이 코드로 교체]
 
-// [do_send_report 함수 전체를 이 'v8' 코드로 교체]
-// 이 함수는 '전송'하지 않고, '엔진'이 보낸 데이터를 '임시 버퍼'에 '저장'만 합니다.
 bool do_send_report(uint8_t interface, const uint8_t* report_with_id, uint8_t len) {
     uint8_t report_id = report_with_id[0];
     const uint8_t* report_data = report_with_id + 1;
     uint8_t data_len = len - 1;
 
+    // ... (interface != 0 로직은 그대로) ...
     if (interface != 0) { 
-        // 모니터링 인터페이스(1) 등은 '원본' 방식으로 그대로 전송합니다.
         tud_hid_n_report(interface, report_id, report_data, data_len);
         return true; 
     }
 
     if (report_id == 2) { // ID 2: '키보드' 데이터가 도착
-        if (data_len <= 16) memcpy(last_kb_report, report_data, data_len);
+        // [수정] 데이터가 0이 아닐 때만 버퍼에 복사
+        bool non_zero = false;
+        for(int i=0; i<data_len; i++) {
+            if (report_data[i] != 0) {
+                non_zero = true;
+                break;
+            }
+        }
+        if (non_zero && data_len <= 16) {
+            memcpy(last_kb_report, report_data, data_len);
+        }
+        
     } else if (report_id == 1) { // ID 1: '마우스' 데이터가 도착
-        if (data_len <= 9) memcpy(last_mouse_report, report_data, data_len);
+        // [수정] 데이터가 0이 아닐 때만 버퍼에 복사
+        bool non_zero = false;
+        for(int i=0; i<data_len; i++) {
+            if (report_data[i] != 0) {
+                non_zero = true;
+                break;
+            }
+        }
+        if (non_zero && data_len <= 9) {
+            memcpy(last_mouse_report, report_data, data_len);
+        }
     }
-    // (ID 3 등은 무시)
-    return true; // '엔진'에게 "데이터를 받았다"고 알림
+    return true; 
 }
 
 void gpio_pins_init() {
@@ -362,6 +380,9 @@ if (tud_hid_n_ready(0)) {
     // 2d. 마우스 '움직임' 데이터는 1회성이므로 전송 후 즉시 초기화합니다.
     //     (키보드 '키' 데이터는 눌린 상태 유지를 위해 초기화하지 않습니다.)
     memset(last_mouse_report, 0, 9);
+    // [추가] 키보드의 마우스/소비자 제어 기능이 있다면 초기화 (안전장치)
+    // (NKRO 비트맵을 제외한 나머지 부분을 0으로 클리어)
+    memset(last_kb_report, 0, 1); // 모디파이어 키 초기화
 }
 
 // 3. 모니터링 리포트 전송 (이것은 원래 로직대로 둡니다)
