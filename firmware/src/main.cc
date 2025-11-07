@@ -29,13 +29,10 @@
 #include "remapper.h"
 #include "tick.h"
 
-// [이 코드 블록을 main.cc 상단에 삽입하세요]
+// [main.cc 파일 상단, 글로벌 변수 섹션에 삽입]
 
-// ---▼ KVM 호환성 v7 수정: '스마트 조립기' 버퍼 ▼---
-// '엔진'이 분리해서 보낸 데이터를 조립하기 위한 전역 버퍼
-
-// 'v2 통합 광고지'의 구조: 키보드(16) + 마우스(9) = 25 바이트
-#define KVM_REPORT_SIZE 25 
+// ---▼ KVM 호환성 v12 수정: '스마트 조립기' 버퍼 (8바이트 규격) ▼---
+#define KVM_REPORT_SIZE 24 // 16 바이트 (KB) + 8 바이트 (MOUSE)
 
 // 1. 최종 '통합 버퍼' (KVM/윈도우로 전송될)
 static uint8_t kvm_combined_report[KVM_REPORT_SIZE] = { 0 };
@@ -44,9 +41,8 @@ static uint8_t kvm_combined_report[KVM_REPORT_SIZE] = { 0 };
 static uint8_t last_kb_report[16] = { 0 }; // 16 바이트 (NKRO)
 
 // 3. '엔진'이 보낸 '마우스(ID 1)' 데이터를 임시 저장할 버퍼
-static uint8_t last_mouse_report[9] = { 0 }; // 9 바이트 (수평 휠 포함)
-// ---▲ KVM 호환성 v7 수정 끝 ▲---
-
+static uint8_t last_mouse_report[8] = { 0 }; // 8 바이트 (최대 안전 규격)
+// ---▲ KVM 호환성 v12 수정 끝 ▲---
 // RP2350 UF2s wipe the last sector of flash every time
 // because of RP2350-E10 errata mitigation. So we put
 // the config one sector down.
@@ -89,46 +85,30 @@ void __no_inline_not_in_flash_func(sof_handler)(uint32_t frame_count) {
     sof_callback();
 }
 
-// [do_send_report 함수 전체를 이 코드로 교체]
+// [기존 do_send_report 함수를 이 코드로 교체]
 
 bool do_send_report(uint8_t interface, const uint8_t* report_with_id, uint8_t len) {
     uint8_t report_id = report_with_id[0];
     const uint8_t* report_data = report_with_id + 1;
     uint8_t data_len = len - 1;
 
-    // ... (interface != 0 로직은 그대로) ...
+    // 모니터링 인터페이스(1) 등은 '원본' 방식으로 그대로 전송합니다.
     if (interface != 0) { 
         tud_hid_n_report(interface, report_id, report_data, data_len);
         return true; 
     }
+    
+    // ID 3(소비자 제어)은 의도적으로 무시됩니다.
+    // ID 2와 ID 1만 임시 버퍼에 저장합니다.
 
     if (report_id == 2) { // ID 2: '키보드' 데이터가 도착
-        // [수정] 데이터가 0이 아닐 때만 버퍼에 복사
-        bool non_zero = false;
-        for(int i=0; i<data_len; i++) {
-            if (report_data[i] != 0) {
-                non_zero = true;
-                break;
-            }
-        }
-        if (non_zero && data_len <= 16) {
-            memcpy(last_kb_report, report_data, data_len);
-        }
-        
+        // [교정] 16바이트만 저장
+        if (data_len <= 16) memcpy(last_kb_report, report_data, data_len);
     } else if (report_id == 1) { // ID 1: '마우스' 데이터가 도착
-        // [수정] 데이터가 0이 아닐 때만 버퍼에 복사
-        bool non_zero = false;
-        for(int i=0; i<data_len; i++) {
-            if (report_data[i] != 0) {
-                non_zero = true;
-                break;
-            }
-        }
-        if (non_zero && data_len <= 9) {
-            memcpy(last_mouse_report, report_data, data_len);
-        }
+        // [v12 교정] 8바이트만 저장
+        if (data_len >= 8) memcpy(last_mouse_report, report_data, 8);
     }
-    return true; 
+    return true; // '엔진'에게 "데이터를 받았다"고 알림
 }
 
 void gpio_pins_init() {
@@ -355,41 +335,38 @@ int main() {
         //if (tud_hid_n_ready(0)) {
         //    send_report(do_send_report);
         //}
-       // if (monitor_enabled && tud_hid_n_ready(1)) {
-       //     send_monitor_report(do_send_report);
-       // }
-        // ---▼ KVM 호환성 v8 수정: '메인 루프 조립기' ▼---
+        //if (monitor_enabled && tud_hid_n_ready(1)) {
+        //    send_monitor_report(do_send_report);
+        //}
+// [while(true) 루프 안의 전송 로직 블록을 이 코드로 교체]
 
-// 1. '엔진' 큐에 쌓인 '분리된' 리포트들을 모두 처리합니다.
-//    (이 함수는 'v8' do_send_report를 호출하여 'last_kb_report'와 'last_mouse_report' 버퍼를 '최신'으로 채웁니다)
-send_report(do_send_report);
+        // 1. '엔진' 큐에 쌓인 '분리된' 리포트들을 모두 처리합니다.
+        //    (이 함수가 do_send_report를 호출하여 last_kb_report/last_mouse_report를 '최신'으로 채웁니다)
+        send_report(do_send_report);
 
-// 2. KVM/윈도우(인터페이스 0)가 '전송 준비'가 되었는지 확인합니다.
-if (tud_hid_n_ready(0)) {
-    // 'v7'에서 실패한 '조립'을 여기서, '메인 루프'가 직접 수행합니다.
+        // 2. KVM/윈도우(인터페이스 0)가 '전송 준비'가 되었는지 확인합니다.
+        if (tud_hid_n_ready(0)) {
+            
+            // 2a. '통합 버퍼'의 0번 칸부터 '최신' 키보드 데이터를 채웁니다.
+            memcpy(kvm_combined_report, last_kb_report, 16);
+            
+            // 2b. '통합 버퍼'의 16번 칸부터 '최신' 마우스 데이터를 채운다
+            // [v12 교정] 8바이트만 조립합니다.
+            memcpy(kvm_combined_report + 16, last_mouse_report, 8);
 
-    // 2a. '통합 버퍼'의 0번 칸부터 '최신' 키보드 데이터를 채웁니다.
-    memcpy(kvm_combined_report, last_kb_report, 16);
-
-    // 2b. '통합 버퍼'의 16번 칸부터 '최신' 마우스 데이터를 채웁니다.
-    memcpy(kvm_combined_report + 16, last_mouse_report, 9);
-
-    // 2c. KVM/윈도우에 '리포트 ID가 없는' '완벽한 통합 버퍼'를 전송합니다.
-    tud_hid_report(0, kvm_combined_report, KVM_REPORT_SIZE);
-
-    // 2d. 마우스 '움직임' 데이터는 1회성이므로 전송 후 즉시 초기화합니다.
-    //     (키보드 '키' 데이터는 눌린 상태 유지를 위해 초기화하지 않습니다.)
-    memset(last_mouse_report, 0, 9);
-    // [추가] 키보드의 마우스/소비자 제어 기능이 있다면 초기화 (안전장치)
-    // (NKRO 비트맵을 제외한 나머지 부분을 0으로 클리어)
-    memset(last_kb_report, 0, 1); // 모디파이어 키 초기화
-}
-
-// 3. 모니터링 리포트 전송 (이것은 원래 로직대로 둡니다)
-if (monitor_enabled && tud_hid_n_ready(1)) {
-    send_monitor_report(do_send_report);
-}
-// ---▲ KVM 호환성 v8 수정 끝 ▲---
+            // 2c. KVM/윈도우에 '리포트 ID가 없는' '완벽한 통합 버퍼' (24바이트)를 전송합니다.
+            tud_hid_report(0, kvm_combined_report, KVM_REPORT_SIZE);
+            
+            // 2d. 마우스/키보드 초기화 (잔류 오염 방지)
+            memset(last_mouse_report, 0, 8); // 마우스 8바이트 초기화
+            last_kb_report[0] = 0; // 모디파이어 키 (0번 바이트)만 초기화
+        }
+        
+        // 3. 모니터링 리포트 전송 (나머지 로직은 그대로 둡니다)
+        if (monitor_enabled && tud_hid_n_ready(1)) {
+            send_monitor_report(do_send_report);
+        }
+                
         if (our_descriptor->main_loop_task != nullptr) {
             our_descriptor->main_loop_task();
         }
