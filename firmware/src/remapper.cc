@@ -2008,8 +2008,30 @@ void parse_our_descriptor() {
             }
         }
     }
+// ... (parse_our_descriptor 함수의 윗부분 코드) ...
+            }
+        }
+    }
 
-    rlencode(our_usage_ranges_set, our_usages_rle);
+    // ---▼ KVM 호환성 v3 수정: '엔진' 강제 개조 (이 코드를 여기에 삽입) ▼---
+    // 'remapper.cc'의 '엔진'이 '광고지'를 무시하고 
+    // 리포트 ID 1, 2를 계속 사용하려는 '옛 습관'을 수정합니다.
+    //
+    // 'our_usages' 맵에 파싱된 모든 'usage_def'(지도)를 순회하면서,
+    // 'report_id' 값을 0으로 강제로 덮어써서,
+    // '엔진'이 모든 데이터를 'reports[0]'('통합 버퍼')에 쓰도록 만듭니다.
+    for (auto& [report_id, usage_map] : our_usages) {
+        for (auto& [usage, usage_def] : usage_map) {
+            usage_def.report_id = 0; // '지도'의 report_id를 0으로 강제
+        }
+    }
+    for (auto& [usage, usage_def] : our_usages_flat) {
+        usage_def.report_id = 0; // '평탄화된 지도'의 report_id도 0으로 강제
+    }
+    // ---▲ KVM 호환성 v3 수정 끝 ▲---
+
+
+    rlencode(our_usage_ranges_set, our_usages_rle); // <-- 이 줄 바로 위에 삽입
 }
 
 void print_stats() {
