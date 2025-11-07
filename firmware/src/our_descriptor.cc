@@ -9,12 +9,44 @@ const uint8_t REPORT_ID_MOUSE = 1;
 const uint8_t REPORT_ID_KEYBOARD = 2;
 const uint8_t REPORT_ID_CONSUMER = 3;
 
-// [교체할 코드]
-// 'our_report_descriptor_kb_mouse' 배열 전체를 아래 코드로 덮어쓰세요.
+// [our_report_descriptor_kb_mouse 배열 전체를 이 코드로 교체하세요]
 const uint8_t our_report_descriptor_kb_mouse[] = {
-// [이 코드로 마우스 섹션을 교체하세요]
+    // --------------------------------------------------------------------------
+    // KVM 호환성을 위한 '단일 통짜' 리포트 v3 (총 24 바이트) - Report ID 제거
+    // --------------------------------------------------------------------------
 
-    // -- 마우스 Collection 시작 (키보드 Collection 내부에 중첩) --
+    // 키보드 Collection 시작 (16 바이트)
+    0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
+    0x09, 0x06,        // Usage (Keyboard)
+    0xA1, 0x01,        // Collection (Application)
+    
+    // -- 키보드 모디파이어 (1 바이트) --
+    0x05, 0x07,        //   Usage Page (Kbrd/Keypad)
+    0x19, 0xE0,        //   Usage Minimum (0xE0)
+    0x29, 0xE7,        //   Usage Maximum (0xE7)
+    0x15, 0x00,        //   Logical Minimum (0)
+    0x25, 0x01,        //   Logical Maximum (1)
+    0x75, 0x01,        //   Report Size (1)
+    0x95, 0x08,        //   Report Count (8)
+    0x81, 0x02,        //   Input (Data,Var,Abs)
+    
+    // -- 키보드 NKRO 비트맵 (15 바이트) --
+    0x19, 0x04,        //   Usage Minimum (0x04)
+    0x29, 0x73,        //   Usage Maximum (0x73) (112 키)
+    0x95, 0x70,        //   Report Count (112)
+    0x81, 0x02,        //   Input (Data,Var,Abs)
+    0x19, 0x87,        //   Usage Minimum (0x87)
+    0x29, 0x8B,        //   Usage Maximum (0x8B) (5 키)
+    0x95, 0x05,        //   Report Count (5)
+    0x81, 0x02,        //   Input (Data,Var,Abs)
+    0x09, 0x90,        //   Usage (0x90)
+    0x09, 0x91,        //   Usage (0x91) (2 키)
+    0x95, 0x02,        //   Report Count (2)
+    0x81, 0x02,        //   Input (Data,Var,Abs)
+    0x95, 0x01,        //   Report Count (1) (1 비트 패딩)
+    0x81, 0x03,        //   Input (Const,Var,Abs) // 총 16 바이트
+    
+    // -- 마우스 Collection 시작 (8 바이트) --
     0x05, 0x01,        //   Usage Page (Generic Desktop Ctrls)
     0x09, 0x02,        //   Usage (Mouse)
     0xA1, 0x00,        //   Collection (Physical)
@@ -46,9 +78,7 @@ const uint8_t our_report_descriptor_kb_mouse[] = {
     0x26, 0xFF, 0x7F,  //     Logical Maximum (32767)
     0x81, 0x06,        //     Input (Data,Var,Rel)
 
-    // -- 마우스 수평 휠 제거 및 패딩(Padding) (총 8바이트로 맞추기) --
-    // 1바이트 버튼 + 4바이트 X/Y + 2바이트 휠 = 7바이트. 
-    // 1바이트 패딩을 넣어 8바이트로 만듭니다. (PiKVM 호환)
+    // -- 최종 8바이트 안전 규격을 위한 1바이트 패딩 (1+4+2=7B -> 8B) --
     0x95, 0x01,        //     Report Count (1)
     0x75, 0x08,        //     Report Size (8)
     0x81, 0x03,        //     Input (Const)
@@ -56,7 +86,7 @@ const uint8_t our_report_descriptor_kb_mouse[] = {
     0xC0,              //   End Collection (Physical) (Mouse)
     
     0xC0               // End Collection (Application) (Keyboard)
-};
+}; // <--- 🚨 이 닫는 괄호와 세미콜론이 완벽하게 배열을 닫아야 합니다.
 
 const uint8_t our_report_descriptor_absolute[] = {
     0x05, 0x01,                // Usage Page (Generic Desktop Ctrls)
